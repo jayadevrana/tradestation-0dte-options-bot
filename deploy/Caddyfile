@@ -1,0 +1,27 @@
+# Caddy reverse proxy for the bot.
+# TradingView only sends webhooks to ports 80 or 443, so the bot (on :8000) sits
+# behind Caddy. Bare-IP setups use plain HTTP on :80 below.
+#
+# WHEN YOU HAVE A DOMAIN (recommended for production):
+#   replace the ":80" line with "your-domain.com" and Caddy auto-provisions HTTPS.
+#   e.g.   bot.example.com {
+#              reverse_proxy 127.0.0.1:8000
+#          }
+
+:80 {
+	encode gzip
+
+	# Optional defense-in-depth: only let TradingView's webhook IPs hit /webhook.
+	# Uncomment to enable (keep your own IP testing in mind — it will be blocked).
+	# @tv_block {
+	#     path /webhook
+	#     not remote_ip 52.89.214.238 34.212.75.30 54.218.53.128 52.32.178.7
+	# }
+	# respond @tv_block "forbidden" 403
+
+	reverse_proxy 127.0.0.1:8000
+
+	log {
+		output file /var/log/caddy/bot-access.log
+	}
+}

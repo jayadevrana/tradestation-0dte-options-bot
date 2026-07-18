@@ -1,0 +1,25 @@
+[Unit]
+Description=TradeStation 0DTE Options Bot (FastAPI webhook + risk monitor)
+After=network-online.target
+Wants=network-online.target
+# Don't let a crash-looping bot hammer the broker: max 5 restarts / 60s, then stop.
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=tsbot
+Group=tsbot
+WorkingDirectory=/opt/tradestation-bot
+Environment=PYTHONUNBUFFERED=1
+# App listens only on localhost; Caddy terminates :80/:443 and proxies to it.
+ExecStart=/opt/tradestation-bot/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=3
+# basic hardening
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

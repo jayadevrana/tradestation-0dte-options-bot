@@ -1,0 +1,151 @@
+# ════════════════════════════════════════════════════════════════════════════
+#  TradeStation 0DTE Options Bot — ALL tunable parameters live here.
+#  Change values here; you should never need to touch the code to adjust the
+#  strategy. Restart the bot (or hit POST /reload) after editing.
+# ════════════════════════════════════════════════════════════════════════════
+
+# sim  = paper trading (https://sim-api.tradestation.com)  <-- safe, use this first
+# live = REAL MONEY    (https://api.tradestation.com)
+environment: sim
+
+broker:
+  # Options trade in the MARGIN (equities) account — NOT Futures/Forex.
+  # SIM accounts: SIM3287668F=Futures, SIM3287667M=Margin, SIM3287669X=Forex
+  account_id: "SIM3287667M"
+
+webhook:
+  # The "secret" field in every TradingView alert JSON must equal this string.
+  # SET IT IN .env AS WEBHOOK_SECRET (kept out of this file / out of git).
+  shared_secret: ""
+
+# ── Defaults applied when a webhook payload doesn't override them ──────────────
+defaults:
+  underlying: "SPY"          # SPY | QQQ | SPXW (use SPXW for SPX 0DTE, NOT SPX)
+  expiration: "0DTE"         # 0DTE | NEXT
+  strike_selection: "ATM"    # ATM | OTM | ITM
+  strike_offset: 0           # how many strikes away from ATM (0 = ATM, 1 = one strike out, ...)
+  entry_fill: "market"       # market | mid | ask | bid  (market = guaranteed instant fill for the demo)
+  exit_fill: "market"        # market | mid | ask | bid
+  time_in_force: "DAY"
+
+# ── Position sizing ───────────────────────────────────────────────────────────
+sizing:
+  mode: "dollars"            # dollars | percent
+  dollars: 500               # spend ~$500 per trade  (used when mode = dollars)
+  percent: 5                 # spend 5% of account equity (used when mode = percent)
+  max_contracts: 10          # hard cap regardless of budget
+  buying_power_safety: 0.95  # never use more than 95% of buying power
+  max_exposure_pct: 0.50     # block new entries past 50% of equity in open positions (0 = off)
+
+# ── Risk management (stop/trim/trailing/daily-loss monitor; see app/risk.py) ───
+risk:
+  enabled: true              # ON: stop/trim/trailing/daily-loss management active.
+  stop_loss_pct: 0.15        # exit if option premium drops 15% from entry
+  take_profit_pct: 0.0       # 0 = off (use trims); else full exit at +X% (groups can override)
+  trims:                     # partial profit-taking ladder
+    - at_profit_pct: 0.50    #   at +50% profit ...
+      close_pct: 0.50        #   ... sell 50% of the position
+  trailing:
+    enabled: false           # off by default — baskets/per-signal define the exits (stop/TP/trim/BE)
+    activate_at_pct: 0.30    # start trailing once up +30%
+    trail_pct: 0.20          # trail 20% off the peak
+  breakeven:
+    enabled: true
+    trigger_pct: 0.20        # once up +20%, move stop to entry (break-even)
+  daily_max_loss_usd: 20000  # close everything + halt for the day at -$20,000 (editable live from the dashboard)
+  max_losing_trades: 0       # 0 = off; else BLOCK new entries for the day after N losing trades (open positions still managed)
+
+# ── Strategy config groups — per-ticker-set overrides of risk/sizing ──────────
+# A symbol uses its group's settings; symbols in no group use the global config.
+# Any field omitted in a group falls back to global. (Example template — edit freely.)
+groups:
+  - name: "Group A"
+    symbols: ["SPY", "QQQ", "NVDA", "TSLA"]
+    stop_loss_pct: 0.15
+    take_profit_pct: 0.20      # full exit at +20%
+    dollars: 500
+  - name: "Group B"
+    symbols: ["AAPL", "MSFT", "AMD", "META"]
+    stop_loss_pct: 0.10
+    take_profit_pct: 0.30      # full exit at +30%
+    dollars: 300
+
+# ── Execution tuning ──────────────────────────────────────────────────────────
+execution:
+  # Multi-timeframe: if true, the same underlying can hold separate positions
+  # keyed by the "strategy_id" field in the webhook (e.g. SPY_5m vs SPY_15m).
+  multi_strategy_positions: true
+  slippage_ticks: 3          # max ticks to chase a limit before giving up
+  poll_interval_sec: 3       # risk monitor poll cadence
+  async_placement: false     # true = ack TradingView instantly, place order in background
+  reverse_on_opposite: true  # opposite signal (e.g. SELL while long a CALL) closes then reverses
+  dedupe_window_sec: 5.0     # drop identical repeated signals within N sec (absorbs TradingView resends)
+  # ── Exit management mode ──────────────────────────────────────────────────────
+  #  monitor = BOT-SIDE only. The bot manages stop/trim/trailing/break-even/take-profit
+  #            in-process (app/risk.py). No broker order rests — if the bot/server goes
+  #            down, the position is unprotected.
+  #  bracket = BROKER-SIDE only. On each entry fill, attach an OCO of
+  #            [take-profit limit @ entry*(1+take_profit_pct)] + [stop @ entry*(1-stop_loss_pct)]
+  #            off the REAL fill. The broker manages the exit (survives an outage; no phantom
+  #            triggers). NO trailing / trims / break-even — those are bot-side features.
+  #  hybrid  = BOTH (recommended). The broker holds a death-proof STOP backstop set BELOW the
+  #            bot's own stop (entry*(1-(stop_loss_pct+backstop_extra_pct))) so it only fires if
+  #            the bot/server is down; meanwhile the bot keeps managing trailing/trims/break-even/
+  #            take-profit. A TradingView EXIT cancels the backstop first; a trim resizes it.
+  exit_mode: "hybrid"
+  bracket_stop_type: "StopMarket"   # StopMarket = guaranteed fill (can gap on 0DTE) | StopLimit = price-protected (can miss)
+  backstop_extra_pct: 0.05          # hybrid: broker stop sits this far BELOW the bot stop (e.g. bot -15% -> broker -20%)
+  # Bot-side exit robustness vs bad/stale option quotes (the broker backstop is unaffected):
+  exit_confirm_ticks: 2             # a bid-threshold exit (stop/trail/BE/TP/trim) must hold this many ticks in a row before firing
+  max_spread_ratio: 0.5             # ignore a quote whose (ask-bid)/mid exceeds this — a bad/one-sided tick won't trigger an exit
+  exit_smoothing_ticks: 5           # value the option at the MEDIAN of the last N prices — kills 1-2 tick quote spikes (phantom TP/stop)
+  max_quote_disagreement: 0.20      # skip the tick if bid and last-traded disagree by >20% (one-sided garbage print) — broker backstop still protects
+  hide_strategy_prefix: "loop_"     # hide internal self-test trades (strategy_id starting "loop_") from the client dashboard / P&L / CSV. Set "" to show all.
+
+# ── Low-latency pre-cache (hot path) ──────────────────────────────────────────
+# The bot continuously keeps these symbols' ATM call/put contracts + quotes +
+# account equity in memory, so a webhook places an order with no data lookups.
+cache:
+  symbols: ["SPY", "QQQ", "IWM", "DIA", "META", "NVDA", "TSLA", "AAPL", "MSFT", "AMZN", "GOOGL", "AMD", "NFLX", "AVGO", "COIN", "MSTR"]
+                             # liquid symbols to keep hot; other symbols still work via slow fallback
+  hot_refresh_sec: 5.0       # refresh underlying + option quotes every N sec
+  chain_refresh_sec: 60.0    # refresh expirations + strikes every N sec
+  equity_refresh_sec: 5.0    # refresh account equity every N sec
+  stale_after_sec: 8.0       # if hot data older than this, fall back to slow path
+
+# ── Trading schedule — NEW ENTRIES only inside this window ────────────────────
+# Exits, stops, trims, trailing, and the daily-loss kill-switch are ALWAYS allowed.
+schedule:
+  enabled: true              # false = allow entries any time
+  timezone: "America/New_York"
+  entry_start: "09:30"       # no new entries before this (ET)
+  entry_end: "15:45"         # no new entries after this (avoid holding into the close)
+  days: ["Mon", "Tue", "Wed", "Thu", "Fri"]
+  holidays: []               # e.g. ["2026-07-03", "2026-11-26"] — skip new entries
+  flatten_enabled: true      # force-close EVERY open position at flatten_at (market) — no 0DTE into expiry
+  flatten_at: "15:50"        # ET; must be after entry_end and before the 16:00 close
+
+# ── Order retry / limit-chase — applies to LIMIT fills only (market = instant) ─
+retry:
+  enabled: true
+  applies_to: "both"         # entries | exits | both
+  max_attempts: 20           # re-price + re-submit up to this many times
+  interval_sec: 2.0          # wait this long for a fill before chasing
+  price_step_ticks: 1        # chase this many ticks toward marketable per attempt
+  market_fallback: false     # after max attempts, CANCEL the order (no market fallback)
+
+# ── Watcher / reconciliation — alerts if bot state drifts from the broker ─────
+watcher:
+  enabled: true
+  interval_sec: 60           # reconcile bot vs broker every N sec
+  alert: true                # send Telegram alerts on discrepancies
+
+# ── Telegram trade alerts ─────────────────────────────────────────────────────
+# Bot token + chat id go in .env (TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID).
+# See docs/TELEGRAM_SETUP.md. Notifications are sent off the hot path (no latency).
+telegram:
+  enabled: true              # active once TELEGRAM_BOT_TOKEN + TELEGRAM_CHAT_ID are set in .env
+  notify_entries: true       # buy->call / sell->put placed
+  notify_exits: true         # exits, stops, trims, trailing, kill-switch
+  notify_errors: true        # failed/rejected orders, startup errors
+  notify_lifecycle: true     # bot online / offline
