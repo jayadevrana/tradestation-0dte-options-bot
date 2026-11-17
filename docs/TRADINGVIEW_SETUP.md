@@ -40,7 +40,7 @@ https://a1b2c3d4.ngrok-free.app/webhook
 The secret now lives in `.env` (not `config.yaml`), so it stays out of git:
 
 ```
-WEBHOOK_SECRET=j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc
+WEBHOOK_SECRET=YOUR_WEBHOOK_SECRET
 ```
 
 The exact same string must appear in every alert's JSON `secret` field. Rotate it
@@ -64,17 +64,17 @@ before going live (it was shared during setup).
 
 **BUY signal (opens a CALL):**
 ```json
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "buy", "symbol": "SPY" }
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "buy", "symbol": "SPY" }
 ```
 
 **SELL signal (opens a PUT):**
 ```json
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "sell", "symbol": "SPY" }
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "sell", "symbol": "SPY" }
 ```
 
 **EXIT signal (closes the open position):**
 ```json
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "exit", "symbol": "SPY" }
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "exit", "symbol": "SPY" }
 ```
 
 Notes:
@@ -85,13 +85,13 @@ Notes:
 **Two timeframes, same ticker, managed separately** — add a different `strategy_id`
 per timeframe (one alert each):
 ```json
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "buy", "symbol": "SPY", "strategy_id": "SPY_5m" }
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "buy", "symbol": "SPY", "strategy_id": "SPY_15m" }
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "buy", "symbol": "SPY", "strategy_id": "SPY_5m" }
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "buy", "symbol": "SPY", "strategy_id": "SPY_15m" }
 ```
 
 **Optional per-alert overrides** (otherwise config defaults apply):
 ```json
-{ "secret": "j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc", "action": "buy", "symbol": "QQQ",
+{ "secret": "YOUR_WEBHOOK_SECRET", "action": "buy", "symbol": "QQQ",
   "fill": "market", "expiration": "0DTE", "strike_selection": "OTM",
   "strike_offset": 1, "dollars": 300, "id": "{{timenow}}" }
 ```
@@ -103,7 +103,7 @@ fire unique so legitimate repeats aren't dropped.)
 ```pinescript
 //@version=5
 strategy("Bot Bridge", overlay=true)
-S = '"secret":"j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc"'
+S = '"secret":"YOUR_WEBHOOK_SECRET"'
 // ... your entry/exit conditions ...
 if (longCondition)            // bullish -> buy a CALL
     strategy.entry("L", strategy.long)
@@ -126,14 +126,14 @@ curl -s http://localhost:8000/cache  | python3 -m json.tool
 # BUY -> opens a CALL
 curl -s -X POST http://localhost:8000/webhook \
   -H 'Content-Type: application/json' \
-  -d '{"secret":"j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc","action":"buy","symbol":"SPY"}' \
+  -d '{"secret":"YOUR_WEBHOOK_SECRET","action":"buy","symbol":"SPY"}' \
   | python3 -m json.tool
 
 # SELL -> opens a PUT   |   EXIT -> closes
 curl -s -X POST http://localhost:8000/webhook -H 'Content-Type: application/json' \
-  -d '{"secret":"j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc","action":"sell","symbol":"SPY"}' | python3 -m json.tool
+  -d '{"secret":"YOUR_WEBHOOK_SECRET","action":"sell","symbol":"SPY"}' | python3 -m json.tool
 curl -s -X POST http://localhost:8000/webhook -H 'Content-Type: application/json' \
-  -d '{"secret":"j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc","action":"exit","symbol":"SPY"}' | python3 -m json.tool
+  -d '{"secret":"YOUR_WEBHOOK_SECRET","action":"exit","symbol":"SPY"}' | python3 -m json.tool
 
 # see open positions
 curl -s http://localhost:8000/positions | python3 -m json.tool

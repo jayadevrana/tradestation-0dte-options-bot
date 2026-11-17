@@ -73,7 +73,7 @@ Paste the BUY/SELL/EXIT JSON from `docs/TRADINGVIEW_SETUP.md` into the alert mes
 Test without TradingView:
 ```bash
 curl -s -X POST http://51.79.225.13/webhook -H 'Content-Type: application/json' \
-  -d '{"secret":"j5yCKE1WcQq42fwQs3twUL8u59E3Z1Sc","action":"buy","symbol":"SPY"}'
+  -d '{"secret":"YOUR_WEBHOOK_SECRET","action":"buy","symbol":"SPY"}'
 ```
 
 ## 5. Updating the code later
